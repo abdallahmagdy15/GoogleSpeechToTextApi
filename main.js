@@ -2,17 +2,17 @@
 
 const express = require('express');
 const app = express();
-const port = 3002;
+const port = 3000;
 
 const cors = require('cors')
 
 // Node-Record-lpcm16
 const recorder = require('node-record-lpcm16');
-
+let recording = null;
 // Imports the Google Cloud client library
 const speech = require('@google-cloud/speech');
 
-function speechFunction() {
+async function speechFunction(res) {
     const encoding = 'LINEAR16';
     const sampleRateHertz = 16000;
     const languageCode = 'en-US';
@@ -34,33 +34,34 @@ function speechFunction() {
 
     // Creates a client
     const client = new speech.SpeechClient();
-
     // Create a recognize stream
     const recognizeStream = client
-    .streamingRecognize(request)
-    .on('error', console.error)
-    .on('data', data =>
-        // process.stdout.write(
-        console.log(    
-        data.results[0] && data.results[0].alternatives[0]
-            ? `Transcription: ${data.results[0].alternatives[0].transcript}\n`
-            : `\n\nReached transcription time limit, press Ctrl+C\n`
-        )
-    );
-
+        .streamingRecognize(request)
+        .on('error', console.error)
+        .on('data', data => {
+            // process.stdout.write(
+            if (data.results[0] && data.results[0].alternatives[0]) {
+                console.log(`Transcription: ${data.results[0].alternatives[0].transcript}\n`);
+                res.send({ text: data.results[0].alternatives[0].transcript });
+            }
+            else {
+                console.log(`\n\nReached transcription time limit, press Ctrl+C\n`);
+                return "Error";
+            }
+        });
     // Start recording and send the microphone input to the Speech API
-    recorder
-    .record({
-        sampleRateHertz: sampleRateHertz,
-        threshold: 0, //silence threshold
-        recordProgram: 'rec', // Try also "arecord" or "sox"
-        silence: '5.0', //seconds of silence before ending
-        endOnSilence: true,
-        thresholdEnd: 0.5
-    })
-    .stream()
-    .on('error', console.error)
-    .pipe(recognizeStream);
+    recording = recorder
+        .record({
+            sampleRateHertz: sampleRateHertz,
+            threshold: 0, //silence threshold
+            recordProgram: 'sox', // Try also "arecord" or "sox"
+            silence: '1.0', //seconds of silence before ending
+            endOnSilence: true,
+            thresholdEnd: 0.5
+        })
+    recording.stream()
+        .on('error', console.error)
+        .pipe(recognizeStream);
 
     console.log('Listening, press Ctrl+C to stop.');
     // [END micStreamRecognize]
@@ -68,22 +69,24 @@ function speechFunction() {
 
 app.use(cors());
 
-app.use('/api/speech-to-text/',function(req, res){
-    speechFunction(function(err, result){
+app.get('/api/speech-to-text/', function (req, res) {
+    speechFunction(res, function (err) {
         if (err) {
             console.log('Error retrieving transcription: ', err);
             res.status(500).send('Error 500');
             return;
         }
-        res.send(result);
     })
 });
+app.post('/api/speech-to-text/', function (req, res) {
+    if (recording != null) {
+        recording.stop();
+        res.send({ status: "stopped" });
+    } else {
+        res.error("error stopping the record");
+    }
+});
 
-// app.use('/api/speech-to-text/', function(req, res) {
-//     res.speechFunction();
-// });
-
-// app.get('/speech', (req, res) => res.speechFunction);
 
 app.listen(port, () => {
     console.log(`Listening on port: ${port}, at http://localhost:${port}/`);
