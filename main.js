@@ -43,6 +43,7 @@ async function speechFunction(res) {
             if (data.results[0] && data.results[0].alternatives[0]) {
                 console.log(`Transcription: ${data.results[0].alternatives[0].transcript}\n`);
                 isSent = true;
+                recording.stop();
                 res.send({ text: data.results[0].alternatives[0].transcript });
             }
             else {
@@ -56,7 +57,7 @@ async function speechFunction(res) {
             sampleRateHertz: sampleRateHertz,
             threshold: 0, //silence threshold
             recordProgram: 'sox', // Try also "arecord" or "sox"
-            silence: '1.3', //seconds of silence before ending
+            silence: '1.0', //seconds of silence before ending
             endOnSilence: true,
             thresholdEnd: 0.5
         })
